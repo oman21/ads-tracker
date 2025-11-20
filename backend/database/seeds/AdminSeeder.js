@@ -5,7 +5,9 @@ const User = use('App/Models/User')
 const DEFAULT_ADMIN = {
   email: 'admin@example.com',
   username: 'ads-admin',
-  password: 'secret123'
+  password: 'secret123',
+  role: 'super_admin',
+  organization: 'Core Ops'
 }
 
 class AdminSeeder {

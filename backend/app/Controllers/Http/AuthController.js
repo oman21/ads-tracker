@@ -21,7 +21,13 @@ class AuthController {
         user: {
           id: user.id,
           email: user.email,
-          username: user.username
+          username: user.username,
+          role: user.role,
+          organization: user.organization,
+          partnerKey: user.partner_key,
+          revenueShare: user.revenue_share,
+          payoutBalance: Number(user.payout_balance || 0),
+          balance: Number(user.balance || 0)
         }
       }
     } catch (error) {

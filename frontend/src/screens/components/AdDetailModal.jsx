@@ -8,12 +8,15 @@ const AdDetailModal = ({
   renderTargetingLabel,
   ad,
   stats,
+  billing,
   activity,
   activityMeta,
   snippet,
+  snippetPartnerKey,
   snippetLoading,
   copiedAd,
   onGenerateSnippet,
+  onSnippetPartnerKeyChange,
   onCopySnippet,
   onFilterChange,
   onPrevPage,
@@ -24,6 +27,12 @@ const AdDetailModal = ({
 }) => {
   if (!isOpen || !ad) return null
   if (typeof document === 'undefined') return null
+  const formatList = (list, fallback) => {
+    if (Array.isArray(list) && list.length) {
+      return list.join(', ')
+    }
+    return fallback
+  }
   const modalContent = (
     <div className="app-modal">
       <div className="app-modal__backdrop" onClick={onClose} aria-hidden="true" />
@@ -66,6 +75,10 @@ const AdDetailModal = ({
                   <strong className="block mt-1">{ad.ctaLabel || 'N/A'}</strong>
                 </div>
                 <div>
+                  <span className="text-xs uppercase tracking-[0.3em] text-slate-400">Slot key</span>
+                  <strong className="block mt-1 font-mono text-sm">{ad.slotKey || '—'}</strong>
+                </div>
+                <div>
                   <span className="text-xs uppercase tracking-[0.3em] text-slate-400">Creative type</span>
                   <strong className="block mt-1">{ad.creativeType?.toUpperCase()}</strong>
                 </div>
@@ -101,20 +114,29 @@ const AdDetailModal = ({
             <div className="rounded-2xl border border-slate-100 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-slate-900">Embed snippet</h3>
-                <button
-                  className={ghostSmallButtonClass}
-                  type="button"
-                  onClick={() => onGenerateSnippet(ad.id)}
-                  disabled={snippetLoading === ad.id}
-                >
-                  {snippetLoading === ad.id ? 'Loading…' : 'Generate'}
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    className="rounded-xl border border-slate-200 px-3 py-1.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-blue-400"
+                    placeholder="Partner key"
+                    value={snippetPartnerKey}
+                    onChange={(event) => onSnippetPartnerKeyChange(ad.id, event.target.value)}
+                  />
+                  <button
+                    className={ghostSmallButtonClass}
+                    type="button"
+                    onClick={() => onGenerateSnippet(ad.id, snippetPartnerKey)}
+                    disabled={snippetLoading === ad.id}
+                  >
+                    {snippetLoading === ad.id ? 'Loading…' : 'Generate'}
+                  </button>
+                </div>
               </div>
               {snippet ? (
                 <>
                   <div className="bg-slate-900 text-white rounded-2xl p-4 text-xs overflow-x-auto">
                     <code>{snippet}</code>
                   </div>
+                  <p className="text-xs text-slate-400">Slot key: <span className="font-mono">{ad.slotKey || '—'}</span></p>
                   <button
                     className={ghostSmallButtonClass}
                     type="button"
@@ -122,10 +144,48 @@ const AdDetailModal = ({
                   >
                     {copiedAd === ad.id ? 'Copied!' : 'Copy snippet'}
                   </button>
-                </>
+                  </>
               ) : (
                 <p className="text-sm text-slate-500">Generate the embed code to share with partners.</p>
               )}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-100 p-4">
+            <h3 className="text-lg font-semibold text-slate-900 mb-3">Budget & billing</h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                { label: 'CPC bid', value: billing?.cpcBid ?? ad?.cpcBid ?? 0 },
+                { label: 'Daily budget', value: billing?.dailyBudget ?? ad?.dailyBudget ?? 0 },
+                { label: 'Total budget', value: billing?.totalBudget ?? ad?.totalBudget ?? 0 },
+                { label: 'Spent today', value: billing?.spentToday ?? ad?.spentToday ?? 0 },
+                { label: 'Spent total', value: billing?.spentTotal ?? ad?.spentTotal ?? 0 }
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                  <span className="text-xs uppercase tracking-[0.3em] text-slate-400">{item.label}</span>
+                  <div className="text-lg font-semibold text-slate-900 mt-1">Rp {formatNumber(item.value || 0)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-100 p-4">
+            <h3 className="text-lg font-semibold text-slate-900 mb-3">Targeting rules</h3>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                { label: 'Country', value: formatList(ad.targetingGeo, 'All countries') },
+                { label: 'Province', value: formatList(ad.targetingProvinces, 'All provinces') },
+                { label: 'City', value: formatList(ad.targetingCities, 'All cities') },
+                { label: 'Device classes', value: formatList(ad.targetingDevices, 'All devices') },
+                { label: 'Interests', value: formatList(ad.targetingInterests, 'All interests') },
+                { label: 'GAID allow list', value: formatList(ad.targetingGaids, 'Any GAID') },
+                { label: 'IDFA allow list', value: formatList(ad.targetingIdfas, 'Any IDFA') }
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+                  <span className="text-xs uppercase tracking-[0.3em] text-slate-400">{item.label}</span>
+                  <div className="text-sm text-slate-800 mt-1 break-words">{item.value}</div>
+                </div>
+              ))}
             </div>
           </div>
 

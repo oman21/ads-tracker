@@ -13,7 +13,9 @@ const CreateAdModal = ({
   primaryButtonClass,
   inputClass,
   textareaClass,
-  selectClass
+  selectClass,
+  canAssignOwner,
+  ownerOptions = []
 }) => {
   if (!isOpen) return null
   if (typeof document === 'undefined') return null
@@ -34,6 +36,38 @@ const CreateAdModal = ({
           </div>
           {error && <span className="inline-flex rounded-full bg-red-100 text-red-600 px-3 py-1 text-sm">{error}</span>}
           <form className="grid gap-4 md:grid-cols-2" onSubmit={onSubmit}>
+            {canAssignOwner && (
+              <label className="flex flex-col gap-1 text-sm text-slate-600">
+                <span>Assign to client</span>
+                <select
+                  className={selectClass}
+                  name="ownerId"
+                  value={formState.ownerId}
+                  onChange={onChange}
+                  required={canAssignOwner}
+                >
+                  <option value="">Select client</option>
+                  {ownerOptions.map((client) => (
+                    <option key={client.id} value={client.id}>
+                      {client.organization || client.username || client.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
+            <label className="flex flex-col gap-1 text-sm text-slate-600">
+              <span>Slot key</span>
+              <input
+                className={inputClass}
+                name="slotKey"
+                placeholder="shared-slot-1"
+                value={formState.slotKey}
+                onChange={onChange}
+              />
+              <span className="text-xs text-slate-400">Ads dengan slot key yang sama akan ikut auction pada snippet yang sama.</span>
+            </label>
+
             <label className="flex flex-col gap-1 text-sm text-slate-600">
               <span>Name *</span>
               <input
@@ -103,6 +137,45 @@ const CreateAdModal = ({
             </label>
 
             <label className="flex flex-col gap-1 text-sm text-slate-600">
+              <span>CPC bid (Rp)</span>
+              <input
+                className={inputClass}
+                name="cpcBid"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formState.cpcBid}
+                onChange={onChange}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm text-slate-600">
+              <span>Daily budget (Rp)</span>
+              <input
+                className={inputClass}
+                name="dailyBudget"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formState.dailyBudget}
+                onChange={onChange}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm text-slate-600">
+              <span>Total budget (Rp)</span>
+              <input
+                className={inputClass}
+                name="totalBudget"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formState.totalBudget}
+                onChange={onChange}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1 text-sm text-slate-600">
               <span>Creative type</span>
               <select
                 className={selectClass}
@@ -115,33 +188,90 @@ const CreateAdModal = ({
               </select>
             </label>
 
-            <label className="flex flex-col gap-1 text-sm text-slate-600">
-              <span>Targeting</span>
-              <select
-                className={selectClass}
-                name="targetingMode"
-                value={formState.targetingMode}
+
+            <label className="md:col-span-2 flex flex-col gap-1 text-sm text-slate-600">
+              <span>Geo targeting (country codes, comma separated)</span>
+              <textarea
+                className={textareaClass}
+                name="targetingGeo"
+                placeholder="us, id, sg"
+                rows="2"
+                value={formState.targetingGeo}
                 onChange={onChange}
-              >
-                <option value="all">Show to everyone</option>
-                <option value="gaid">GAID only</option>
-                <option value="idfa">IDFA only</option>
-              </select>
+              />
             </label>
 
-            {formState.targetingMode !== 'all' && (
-              <label className="md:col-span-2 flex flex-col gap-1 text-sm text-slate-600">
-                <span>{formState.targetingMode.toUpperCase()} list (comma separated)</span>
-                <textarea
-                  className={textareaClass}
-                  name="targetingValues"
-                  placeholder="gaid-a, gaid-b"
-                  rows="2"
-                  value={formState.targetingValues}
-                  onChange={onChange}
-                />
-              </label>
-            )}
+            <label className="md:col-span-2 flex flex-col gap-1 text-sm text-slate-600">
+              <span>Province targeting (comma separated)</span>
+              <textarea
+                className={textareaClass}
+                name="targetingProvinces"
+                placeholder="jakarta, jawa barat"
+                rows="2"
+                value={formState.targetingProvinces}
+                onChange={onChange}
+              />
+            </label>
+
+            <label className="md:col-span-2 flex flex-col gap-1 text-sm text-slate-600">
+              <span>City targeting (comma separated)</span>
+              <textarea
+                className={textareaClass}
+                name="targetingCities"
+                placeholder="jakarta selatan, bandung"
+                rows="2"
+                value={formState.targetingCities}
+                onChange={onChange}
+              />
+            </label>
+
+            <label className="md:col-span-2 flex flex-col gap-1 text-sm text-slate-600">
+              <span>Device classes (e.g. mobile, desktop, android, ios)</span>
+              <textarea
+                className={textareaClass}
+                name="targetingDevices"
+                placeholder="mobile, desktop"
+                rows="2"
+                value={formState.targetingDevices}
+                onChange={onChange}
+              />
+            </label>
+
+            <label className="md:col-span-2 flex flex-col gap-1 text-sm text-slate-600">
+              <span>Interest tags</span>
+              <textarea
+                className={textareaClass}
+                name="targetingInterests"
+                placeholder="gaming, fintech, travel"
+                rows="2"
+                value={formState.targetingInterests}
+                onChange={onChange}
+              />
+            </label>
+
+            <label className="md:col-span-2 flex flex-col gap-1 text-sm text-slate-600">
+              <span>GAID allow list</span>
+              <textarea
+                className={textareaClass}
+                name="targetingGaids"
+                placeholder="gaid-a, gaid-b"
+                rows="2"
+                value={formState.targetingGaids}
+                onChange={onChange}
+              />
+            </label>
+
+            <label className="md:col-span-2 flex flex-col gap-1 text-sm text-slate-600">
+              <span>IDFA allow list</span>
+              <textarea
+                className={textareaClass}
+                name="targetingIdfas"
+                placeholder="idfa-a, idfa-b"
+                rows="2"
+                value={formState.targetingIdfas}
+                onChange={onChange}
+              />
+            </label>
 
             <div className="md:col-span-2 flex flex-wrap items-center gap-3">
               <button className={primaryButtonClass} type="submit" disabled={saving}>

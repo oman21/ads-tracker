@@ -4,7 +4,8 @@ import DashboardScreen from './screens/DashboardScreen'
 import AdsScreen from './screens/AdsScreen'
 import UsersScreen from './screens/UsersScreen'
 import './App.css'
-import { AdsApi, API_BASE, AuthApi, ReportsApi, clearAuthToken, setAuthToken } from './api'
+import { AdsApi, API_BASE, AuthApi, ReportsApi, UsersApi, clearAuthToken, setAuthToken } from './api'
+import UserCreateModal from './screens/components/UserCreateModal'
 
 const initialFormState = {
   name: '',
@@ -14,8 +15,29 @@ const initialFormState = {
   ctaUrl: '',
   ctaLabel: 'Install now',
   creativeType: 'box',
-  targetingMode: 'all',
-  targetingValues: ''
+  slotKey: '',
+  targetingGeo: '',
+  targetingProvinces: '',
+  targetingCities: '',
+  targetingDevices: '',
+  targetingInterests: '',
+  targetingGaids: '',
+  targetingIdfas: '',
+  cpcBid: '0',
+  dailyBudget: '0',
+  totalBudget: '0',
+  ownerId: ''
+}
+
+const initialUserFormState = {
+  username: '',
+  email: '',
+  password: '',
+  role: 'client',
+  organization: '',
+  partnerKey: '',
+  revenueShare: '60',
+  payoutThreshold: '500000'
 }
 
 const NAV_ITEMS = [
@@ -25,15 +47,17 @@ const NAV_ITEMS = [
     label: 'Dashboard',
     eyebrow: 'Performance',
     title: 'Insights dashboard',
-    description: 'Monitor partner activity, impression volume, and recent tracking events.'
+    description: 'Monitor partner activity, impression volume, and recent tracking events.',
+    roles: ['super_admin', 'client', 'publisher']
   },
   {
     key: 'ads',
     path: '/ads',
     label: 'Ads',
     eyebrow: 'Campaigns',
-    title: 'Ad management',
-    description: 'Create creatives, review stats, and deliver partner-ready pixels.'
+    title: 'Ads management',
+    description: 'Create creatives, review stats, and deliver partner-ready pixels.',
+    roles: ['super_admin', 'client', 'publisher']
   },
   {
     key: 'users',
@@ -41,7 +65,8 @@ const NAV_ITEMS = [
     label: 'Users',
     eyebrow: 'Accounts',
     title: 'User management',
-    description: 'Review who has access to the CMS and learn how to provision new admins.'
+    description: 'Review who has access to the CMS and learn how to provision new admins.',
+    roles: ['super_admin']
   }
 ]
 
@@ -64,6 +89,7 @@ function App () {
   const [ads, setAds] = useState([])
   const [statsMap, setStatsMap] = useState({})
   const [snippets, setSnippets] = useState({})
+  const [snippetConfig, setSnippetConfig] = useState({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [snippetLoading, setSnippetLoading] = useState(null)
@@ -75,8 +101,26 @@ function App () {
   const [activityMap, setActivityMap] = useState({})
   const [selectedAdId, setSelectedAdId] = useState(null)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [userDirectory, setUserDirectory] = useState([])
+  const [userDirectoryLoading, setUserDirectoryLoading] = useState(false)
+  const [userFormState, setUserFormState] = useState(initialUserFormState)
+  const [userFormError, setUserFormError] = useState('')
+  const [userFormSaving, setUserFormSaving] = useState(false)
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
+  const role = authUser?.role || 'client'
+  const availableNavItems = useMemo(
+    () => NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(role)),
+    [role]
+  )
+  const canCreateAds = role === 'super_admin' || role === 'client'
+  const canAccessUsers = role === 'super_admin'
+  const canViewAds = ['super_admin', 'client', 'publisher'].includes(role)
+  const clientOptions = useMemo(
+    () => userDirectory.filter((user) => user.role === 'client'),
+    [userDirectory]
+  )
 
   const pixelBaseUrl = useMemo(() => {
     const provided = import.meta.env.VITE_PIXEL_BASE_URL
@@ -98,10 +142,18 @@ function App () {
     return stripped
   }, [location.pathname])
 
-  const activeNav = NAV_ITEMS.find((item) => item.path === normalizedPath) || NAV_ITEMS[0]
+  const activeNav = availableNavItems.find((item) => item.path === normalizedPath) || availableNavItems[0]
   const selectedAd = useMemo(() => ads.find((ad) => ad.id === selectedAdId) || null, [ads, selectedAdId])
-  const selectedStats = selectedAd ? (statsMap[selectedAd.id] || {}) : null
-  const selectedSnippet = selectedAd ? snippets[selectedAd.id] : null
+  const selectedStatsEntry = selectedAd ? (statsMap[selectedAd.id] || null) : null
+  const selectedStats = selectedStatsEntry ? selectedStatsEntry.totals : null
+  const selectedBilling = selectedStatsEntry ? selectedStatsEntry.billing : null
+  const rawSnippetEntry = selectedAd ? snippets[selectedAd.id] : null
+  const selectedSnippet = rawSnippetEntry && typeof rawSnippetEntry === 'object'
+    ? rawSnippetEntry
+    : rawSnippetEntry
+      ? { snippet: rawSnippetEntry, partnerKey: '' }
+      : null
+  const selectedSnippetConfig = selectedAd ? snippetConfig[selectedAd.id] : null
   const selectedActivityState = selectedAd ? activityMap[selectedAd.id] : null
   const selectedActivity = selectedActivityState ? selectedActivityState.events : null
   const selectedActivityMeta = selectedActivityState ? selectedActivityState.meta : null
@@ -111,13 +163,21 @@ useEffect(() => {
     setAuthToken(token)
     refreshAds()
     loadReport()
-    } else {
-      clearAuthToken()
-      setAds([])
-      setStatsMap({})
-      setReport(null)
-    }
+  } else {
+    clearAuthToken()
+    setAds([])
+    setStatsMap({})
+    setReport(null)
+  }
 }, [token])
+
+useEffect(() => {
+  if (token && canAccessUsers) {
+    loadUsers()
+  } else if (!canAccessUsers) {
+    setUserDirectory([])
+  }
+}, [token, canAccessUsers])
 
 useEffect(() => {
   if (!normalizedPath.startsWith('/ads')) {
@@ -143,8 +203,11 @@ useEffect(() => {
     setStatsMap({})
     setReport(null)
     setSnippets({})
+    setSnippetConfig({})
     setActivityMap({})
     setFormState(initialFormState)
+    setUserDirectory([])
+    setUserFormState(initialUserFormState)
     clearAuthToken()
     localStorage.removeItem('adsTrackerToken')
     localStorage.removeItem('adsTrackerUser')
@@ -152,7 +215,7 @@ useEffect(() => {
   }
 
   const refreshAds = async () => {
-    if (!token) {
+    if (!token || !canViewAds) {
       setLoading(false)
       return
     }
@@ -184,7 +247,10 @@ useEffect(() => {
       list.map(async (ad) => {
         try {
           const stats = await AdsApi.stats(ad.id)
-          return [ad.id, stats.totals]
+          return [ad.id, {
+            totals: stats.totals || {},
+            billing: stats.billing || null
+          }]
         } catch (err) {
           console.error('stats error', err)
           return [ad.id, null]
@@ -216,6 +282,80 @@ useEffect(() => {
     }
   }
 
+  const loadUsers = async () => {
+    if (!token || !canAccessUsers) {
+      return
+    }
+    setUserDirectoryLoading(true)
+    try {
+      const list = await UsersApi.list()
+      setUserDirectory(list)
+    } catch (err) {
+      if (err.status === 401) {
+        handleLogout()
+      } else {
+        console.error('users load error', err)
+      }
+    } finally {
+      setUserDirectoryLoading(false)
+    }
+  }
+
+  const handleUserFormChange = (event) => {
+    const { name, value } = event.target
+    setUserFormState((prev) => ({
+      ...prev,
+      [name]: value
+    }))
+  }
+
+  const handleCreateUser = async (event) => {
+    event.preventDefault()
+    setUserFormError('')
+    setUserFormSaving(true)
+
+    try {
+      const isPublisher = userFormState.role === 'publisher'
+      const payload = {
+        username: userFormState.username,
+        email: userFormState.email,
+        password: userFormState.password,
+        role: userFormState.role,
+        organization: userFormState.organization
+      }
+
+      if (isPublisher) {
+        payload.partnerKey = userFormState.partnerKey
+        payload.revenueShare = Number(userFormState.revenueShare || 0)
+        payload.payoutThreshold = Number(userFormState.payoutThreshold || 0)
+      }
+
+      await UsersApi.create(payload)
+
+      setUserFormState(initialUserFormState)
+      setIsUserModalOpen(false)
+      await loadUsers()
+    } catch (err) {
+      if (err.status === 401) {
+        handleLogout()
+      } else {
+        setUserFormError(err.message || 'Unable to create user')
+      }
+    } finally {
+      setUserFormSaving(false)
+    }
+  }
+
+  const openUserModal = () => {
+    setUserFormError('')
+    setUserFormState(initialUserFormState)
+    setIsUserModalOpen(true)
+  }
+
+  const closeUserModal = () => {
+    setIsUserModalOpen(false)
+  }
+
   const handleAdInputChange = (event) => {
     const { name, value } = event.target
     setFormState((prev) => ({
@@ -230,9 +370,16 @@ useEffect(() => {
     setSaving(true)
 
     try {
-      const targetingValues = formState.targetingMode === 'all'
-        ? []
-        : formState.targetingValues.split(',').map((item) => item.trim()).filter(Boolean)
+      const normalizeList = (value) => {
+        if (!value) return []
+        if (Array.isArray(value)) {
+          return value.map((item) => item.trim()).filter(Boolean)
+        }
+        return value
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean)
+      }
 
       await AdsApi.create({
         name: formState.name,
@@ -242,9 +389,19 @@ useEffect(() => {
         imageUrl: formState.imageUrl,
         ctaUrl: formState.ctaUrl,
         ctaLabel: formState.ctaLabel,
-        targetingMode: formState.targetingMode,
-        targetingValues,
-        active: true
+        slotKey: formState.slotKey,
+        targetingGeo: normalizeList(formState.targetingGeo),
+        targetingProvinces: normalizeList(formState.targetingProvinces),
+        targetingCities: normalizeList(formState.targetingCities),
+        targetingDevices: normalizeList(formState.targetingDevices),
+        targetingInterests: normalizeList(formState.targetingInterests),
+        targetingGaids: normalizeList(formState.targetingGaids),
+        targetingIdfas: normalizeList(formState.targetingIdfas),
+        active: true,
+        cpcBid: Number(formState.cpcBid || 0),
+        dailyBudget: Number(formState.dailyBudget || 0),
+        totalBudget: Number(formState.totalBudget || 0),
+        ownerId: role === 'super_admin' ? Number(formState.ownerId || 0) || undefined : undefined
       })
 
       setFormState(initialFormState)
@@ -262,17 +419,42 @@ useEffect(() => {
     }
   }
 
-  const loadSnippet = async (adId) => {
-    if (snippets[adId]) {
+  const handleSnippetPartnerKeyChange = (adId, value) => {
+    setSnippetConfig((prev) => ({
+      ...prev,
+      [adId]: {
+        ...(prev[adId] || {}),
+        partnerKey: value
+      }
+    }))
+  }
+
+  const loadSnippet = async (adId, options = {}) => {
+    const desiredPartnerKey = typeof options.partnerKey === 'string'
+      ? options.partnerKey
+      : (snippetConfig[adId]?.partnerKey || '')
+    const normalizedPartnerKey = desiredPartnerKey.trim()
+
+    if (snippets[adId] && snippets[adId].partnerKey === normalizedPartnerKey) {
       return
     }
 
     setSnippetLoading(adId)
     try {
-      const snippet = await AdsApi.snippet(adId, pixelBaseUrl)
+      const snippet = await AdsApi.snippet(adId, pixelBaseUrl, normalizedPartnerKey)
       setSnippets((prev) => ({
         ...prev,
-        [adId]: snippet
+        [adId]: {
+          snippet,
+          partnerKey: normalizedPartnerKey
+        }
+      }))
+      setSnippetConfig((prev) => ({
+        ...prev,
+        [adId]: {
+          ...(prev[adId] || {}),
+          partnerKey: normalizedPartnerKey
+        }
       }))
     } catch (err) {
       if (err.status === 401) {
@@ -291,7 +473,10 @@ useEffect(() => {
       const stats = await AdsApi.stats(adId)
       setStatsMap((prev) => ({
         ...prev,
-        [adId]: stats.totals
+        [adId]: {
+          totals: stats.totals || {},
+          billing: stats.billing || null
+        }
       }))
     } catch (err) {
       console.error('stats refresh error', err)
@@ -391,11 +576,36 @@ useEffect(() => {
   }
 
   const renderTargetingLabel = (ad) => {
-    if (ad.targetingMode === 'all' || !ad.targetingValues.length) {
-      return 'All devices'
+    if (!ad) {
+      return 'All audiences'
     }
 
-    return `${ad.targetingMode.toUpperCase()} • ${ad.targetingValues.length} id(s)`
+    const parts = []
+    if (Array.isArray(ad.targetingGeo) && ad.targetingGeo.length) {
+      parts.push(`Geo ${ad.targetingGeo.length}`)
+    }
+    if (Array.isArray(ad.targetingProvinces) && ad.targetingProvinces.length) {
+      parts.push(`Prov ${ad.targetingProvinces.length}`)
+    }
+    if (Array.isArray(ad.targetingCities) && ad.targetingCities.length) {
+      parts.push(`City ${ad.targetingCities.length}`)
+    }
+    if (Array.isArray(ad.targetingDevices) && ad.targetingDevices.length) {
+      parts.push(`Device ${ad.targetingDevices.length}`)
+    }
+    if (Array.isArray(ad.targetingInterests) && ad.targetingInterests.length) {
+      parts.push(`Interest ${ad.targetingInterests.length}`)
+    }
+    if (Array.isArray(ad.targetingGaids) && ad.targetingGaids.length) {
+      parts.push(`GAID ${ad.targetingGaids.length}`)
+    }
+    if (Array.isArray(ad.targetingIdfas) && ad.targetingIdfas.length) {
+      parts.push(`IDFA ${ad.targetingIdfas.length}`)
+    }
+    if (!parts.length) {
+      return 'All audiences'
+    }
+    return parts.join(' • ')
   }
 
   const handleAuthInputChange = (event) => {
@@ -493,12 +703,15 @@ useEffect(() => {
     renderTargetingLabel,
     ad: selectedAd,
     stats: selectedStats,
+    billing: selectedBilling,
     activity: selectedActivity,
     activityMeta: selectedActivityMeta,
-    snippet: selectedSnippet,
+    snippet: selectedSnippet?.snippet,
+    snippetPartnerKey: selectedSnippetConfig?.partnerKey ?? selectedSnippet?.partnerKey ?? '',
     snippetLoading,
     copiedAd,
-    onGenerateSnippet: loadSnippet,
+    onGenerateSnippet: (adId, partnerKey) => loadSnippet(adId, { partnerKey }),
+    onSnippetPartnerKeyChange: handleSnippetPartnerKeyChange,
     onCopySnippet: handleCopy,
     onFilterChange: handleActivityFilterChange,
     onPrevPage: handleActivityPrevPage,
@@ -520,10 +733,27 @@ useEffect(() => {
     primaryButtonClass,
     inputClass,
     textareaClass,
-    selectClass
+    selectClass,
+    canAssignOwner: role === 'super_admin',
+    ownerOptions: clientOptions
   }
 
+  const userModalProps = canAccessUsers
+    ? {
+        isOpen: isUserModalOpen,
+        onClose: closeUserModal,
+        onSubmit: handleCreateUser,
+        onChange: handleUserFormChange,
+        formState: userFormState,
+        error: userFormError,
+        saving: userFormSaving,
+        ghostSmallButtonClass,
+        primaryButtonClass
+      }
+    : null
+
   return (
+    <>
     <div className="min-h-screen bg-slate-100 text-slate-900 flex font-sans">
       <aside className="w-64 bg-slate-900 text-slate-100 flex flex-col gap-6 p-6 sticky top-0 h-screen shadow-2xl">
         <div className="flex flex-col gap-1 uppercase tracking-[0.35em] text-xs text-slate-400">
@@ -531,7 +761,7 @@ useEffect(() => {
           <strong className="tracking-normal text-lg text-white">CMS</strong>
         </div>
         <nav className="flex flex-col gap-2">
-          {NAV_ITEMS.map((item) => (
+          {availableNavItems.map((item) => (
             <NavLink
               key={item.key}
               to={item.path}
@@ -593,40 +823,53 @@ useEffect(() => {
                   onRefresh={loadReport}
                   formatNumber={formatNumber}
                   formatTimestamp={formatTimestamp}
-                />
-              )}
-            />
-            <Route
-              path="/ads"
-              element={(
-                <AdsScreen
-                  ads={ads}
-                  loading={loading}
-                  statsMap={statsMap}
-                  selectedAdId={selectedAdId}
-                  onSelectAd={handleSelectAd}
-                  onOpenCreateModal={openCreateModal}
-                  renderTargetingLabel={renderTargetingLabel}
-                  detailModalProps={detailModalProps}
-                  createModalProps={createModalProps}
-                />
-              )}
-            />
-            <Route
-              path="/users"
-              element={(
-                <UsersScreen
                   authUser={authUser}
-                  onLogout={handleLogout}
                 />
               )}
             />
+            {canViewAds && (
+              <Route
+                path="/ads"
+                element={(
+                  <AdsScreen
+                    ads={ads}
+                    loading={loading}
+                    statsMap={statsMap}
+                    selectedAdId={selectedAdId}
+                    onSelectAd={handleSelectAd}
+                    onOpenCreateModal={openCreateModal}
+                    renderTargetingLabel={renderTargetingLabel}
+                    detailModalProps={detailModalProps}
+                    createModalProps={canCreateAds ? createModalProps : null}
+                    canCreateAds={canCreateAds}
+                  />
+                )}
+              />
+            )}
+            {canAccessUsers && (
+              <Route
+                path="/users"
+                element={(
+                  <UsersScreen
+                    authUser={authUser}
+                    onLogout={handleLogout}
+                    canManage={canAccessUsers}
+                    users={userDirectory}
+                    loading={userDirectoryLoading}
+                    onRefresh={loadUsers}
+                    onOpenCreateModal={openUserModal}
+                  />
+                )}
+              />
+            )}
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </div>
       </div>
     </div>
+    {userModalProps && <UserCreateModal {...userModalProps} />}
+    </>
   )
 }
 

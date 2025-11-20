@@ -1,6 +1,33 @@
 import React from 'react'
 
-const DashboardScreen = ({ report, reportLoading, onRefresh, formatNumber, formatTimestamp }) => {
+const DashboardScreen = ({ report, reportLoading, onRefresh, formatNumber, formatTimestamp, authUser }) => {
+  const role = authUser?.role || 'client'
+  const finance = report?.finance || {}
+  const financeCards = []
+
+  if (role === 'super_admin') {
+    financeCards.push(
+      { label: 'Advertiser balance', value: finance.advertiserBalance || 0, currency: true, description: 'Combined wallet credit across clients.' },
+      { label: 'Publisher liability', value: finance.publisherLiability || 0, currency: true, description: 'Pending payouts owed to partners.' },
+      { label: 'Spend today', value: finance.spendToday || 0, currency: true, description: 'Billable clicks recorded since midnight.' },
+      { label: 'Active campaigns', value: finance.activeCampaigns || 0, description: 'Live ads currently eligible for auction.' }
+    )
+  } else if (role === 'client') {
+    financeCards.push(
+      { label: 'Wallet balance', value: finance.balance || 0, currency: true, description: 'Funds available for CPC billing.' },
+      { label: 'Total spend', value: finance.totalSpend || 0, currency: true, description: 'Lifetime charges taken from your wallet.' },
+      { label: 'Spend today', value: finance.spendToday || 0, currency: true, description: 'Valid clicks collected today.' },
+      { label: 'Active ads', value: finance.activeAds || 0, description: 'Campaigns currently delivering to partners.' }
+    )
+  } else if (role === 'publisher') {
+    financeCards.push(
+      { label: 'Payout balance', value: finance.payoutBalance || 0, currency: true, description: 'Earnings ready for withdrawal.' },
+      { label: 'Total revenue', value: finance.totalRevenue || 0, currency: true, description: 'Billable clicks attributed to you.' },
+      { label: 'Revenue share', value: finance.revenueShare || 0, suffix: '%', description: 'Share of advertiser CPC allocated per click.' },
+      { label: 'Valid clicks', value: finance.validClicks || 0, description: 'Billable clicks attributed to your placements.' }
+    )
+  }
+
   return (
     <>
       <div className="bg-white rounded-3xl shadow-xl p-8 mb-8 flex flex-col gap-6">
@@ -58,6 +85,20 @@ const DashboardScreen = ({ report, reportLoading, onRefresh, formatNumber, forma
                 </div>
               ))}
             </div>
+
+            {financeCards.length > 0 && (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {financeCards.map((card) => (
+                  <div key={card.label} className="rounded-2xl border border-blue-100 bg-blue-50/40 p-4">
+                    <span className="text-sm text-slate-500">{card.label}</span>
+                    <div className="text-2xl font-semibold text-slate-900 mt-2">
+                      {card.currency ? `Rp ${formatNumber(card.value)}` : `${formatNumber(card.value)}${card.suffix || ''}`}
+                    </div>
+                    {card.description && <p className="text-xs text-slate-500 mt-1">{card.description}</p>}
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="grid gap-6 lg:grid-cols-2">
               <div className="rounded-2xl border border-slate-100 p-4">

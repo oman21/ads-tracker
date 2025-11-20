@@ -5,7 +5,7 @@ Full-stack reference implementation for GAID/IDFA based ad delivery. The stack c
 ## Features
 
 - Create and manage ads with headline, creative, CTA, and optional GAID/IDFA allow-lists.
-- Automatic pixel ID generation per ad with embeddable JavaScript for partner sites.
+- Automatic slot key generation per ad with embeddable JavaScript for partner sites.
 - Device-based delivery logic: if a GAID/IDFA filter is present the ad will only render for those identifiers, otherwise it is served to all devices by default.
 - Tracking endpoints for impression, click, and conversion events with persistent analytics.
 - JWT-secured CMS with login and logout flows.
@@ -38,31 +38,37 @@ All `/api/ads/*` and `/api/reports/*` routes require `Authorization: Bearer <jwt
 | ------ | ---- | ----------- |
 | `POST` | `/api/auth/login` | Exchange `{ email, password }` for a JWT + user payload. |
 | `GET` | `/api/ads` | List ads. |
-| `POST` | `/api/ads` | Create a new ad. Include `targetingMode` (`all`, `gaid`, `idfa`) and `targetingValues` (array or comma string). |
+| `POST` | `/api/ads` | Create a new ad. Provide a `slotKey` (string) that represents the widget/placement this ad competes in, plus targeting arrays such as `targetingGeo`, `targetingProvinces`, `targetingCities`, `targetingDevices`, `targetingInterests`, `targetingGaids`, and `targetingIdfas` (each can be an array or comma string). Ads that share the same `slotKey` will participate in the same auction. |
 | `PUT`/`DELETE` | `/api/ads/:id` | Update or remove ads. |
 | `GET` | `/api/ads/:id/stats` | Aggregated impression/click/conversion counts. |
-| `GET` | `/api/ads/:id/snippet` | Returns the `<script>` tag prefilled with the ad’s pixel. Optional `baseUrl` query overrides the host. |
+| `GET` | `/api/ads/:id/snippet` | Returns the `<script>` tag prefilled with the ad’s slot key. Optional `baseUrl` query overrides the host. |
 | `GET` | `/api/reports/overview` | Aggregated totals, partner breakdown, top ads, and recent tracking events. |
-| `GET` | `/api/pixels/:pixelId/ad` | Delivery endpoint used by the embed script with `deviceType` + `deviceId` query params. |
-| `GET` | `/api/pixels/:pixelId/embed.js` | JavaScript pixel loader for partners. |
-| `POST` | `/api/pixels/:pixelId/track` | Accepts `{ eventType: 'impression'|'click'|'conversion', deviceType, deviceId, metadata }`. |
+| `GET` | `/api/pixels/:slotKey/ad` | Delivery endpoint used by the embed script with `deviceType` + `deviceId` query params. |
+| `GET` | `/api/pixels/:slotKey/embed.js` | JavaScript slot loader for partners. |
+| `POST` | `/api/pixels/:slotKey/track` | Accepts `{ eventType: 'impression'|'click'|'conversion', deviceType, deviceId, metadata }`. |
 
-Partner integration example:
+Partner integration example (note that the path segment acts as the slot key — reuse it for every ad that should bid on that slot):
 
 ```html
 <div id="ads-slot"></div>
 <script
-  src="https://your-api.com/api/pixels/PIXEL_ID/embed.js"
-  data-pixel-id="PIXEL_ID"
-  data-device-type="gaid"
-  data-device-id="GAID-123"
-  data-container-id="ads-slot"
+  src="https://your-api.com/api/pixels/news-homepage/embed.js"
+  data-slot="news-homepage"
   data-partner="publisherA"
+  data-container-id="ads-slot"
+  data-category="news"            <!-- optional interest/category hint -->
+  data-device-type="gaid"          <!-- optional: only include if advertiser requires GAID/IDFA -->
+  data-device-id="GAID-123"        <!-- optional -->
+  data-country="id"                <!-- optional targeting context -->
+  data-province="jawa barat"       <!-- optional -->
+  data-city="bandung"              <!-- optional -->
   async
 ></script>
 ```
 
-Once the creative renders the script automatically records impressions and clicks. Partners can trigger conversions by calling `window.adsPixelConversion_PIXEL_ID({ orderId: '123' })`.
+Once the creative renders the script automatically records impressions and clicks. Partners can trigger conversions by calling `window.adsPixelConversion_publisherA({ orderId: '123' })` (an alias keyed by partner as well as the raw slot ID).
+
+> 💡 Reuse the same slot key (`news-homepage` in the example above) across different campaigns if you want them to compete for that placement; the Ad Server will automatically pick the highest valid bid per request.
 
 Creative types:
 
@@ -90,10 +96,10 @@ Adjust them when deploying.
 
 1. Start the Adonis API, run migrations, and seed the admin user.
 2. Start the React dev server and sign in with the seeded credentials.
-3. Create a new ad in the UI. Leave targeting as “Show to everyone” to allow any device.
-4. Click “Generate partner pixel” to see the `<script>` tag and drop it into a test HTML page.
-5. Provide `data-device-type="gaid"`/`idfa` plus the identifier to exercise device-level targeting.
-6. Use the CTA inside the rendered ad to generate click events; trigger conversions with the exposed `window.adsPixelConversion_*` helper.
+3. Create a new ad in the UI, choose (or reuse) a slot key so multiple ads can compete in the same widget, and fill in country/province/city, device, or GAID/IDFA filters as needed.
+4. Click “Generate partner snippet” to see the `<script>` tag (per slot key) and drop it into a test HTML page.
+5. When dropping the snippet into a page, always include `data-partner` (for revenue attribution) and optionally add contextual attributes such as `data-country`, `data-province`, `data-city`, `data-category`, `data-device-class`, `data-device-type`, and `data-device-id` when the advertiser has targeting constraints. If no targeting values are set, you can omit them and the ad will render for everyone by default.
+6. Use the CTA inside the rendered ad to generate click events; trigger conversions with the exposed `window.adsPixelConversion_<partnerKey>` helper.
 7. Return to the CMS dashboard to view the reporting cards populate with new totals, partner rows, and recent activity.
 
 That’s it! The API will persist analytics inside MySQL and the UI polls the stats endpoint to show updated counters.

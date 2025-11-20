@@ -3,23 +3,42 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3333/api'
 let authToken = null
 
+const normalizeArrayField = (value) => {
+  if (!value) {
+    return []
+  }
+
+  if (Array.isArray(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    return value.split(',').map((item) => item.trim()).filter(Boolean)
+  }
+
+  return []
+}
+
 const normalizeAd = (payload) => {
   if (!payload) {
     return null
   }
 
-  const targetingValues = Array.isArray(payload.targetingValues)
-    ? payload.targetingValues
-    : Array.isArray(payload.targeting_values)
-      ? payload.targeting_values
-      : typeof payload.targeting_values === 'string'
-        ? payload.targeting_values.split(',').map((item) => item.trim()).filter(Boolean)
-        : []
+  const targetingValues = normalizeArrayField(payload.targetingValues || payload.targeting_values)
+  const targetingGeo = normalizeArrayField(payload.targetingGeo || payload.targeting_geo)
+  const targetingProvinces = normalizeArrayField(payload.targetingProvinces || payload.targeting_provinces)
+  const targetingCities = normalizeArrayField(payload.targetingCities || payload.targeting_cities)
+  const targetingDevices = normalizeArrayField(payload.targetingDevices || payload.targeting_devices)
+  const targetingInterests = normalizeArrayField(payload.targetingInterests || payload.targeting_interests)
+  const targetingGaids = normalizeArrayField(payload.targetingGaids || payload.targeting_gaids)
+  const targetingIdfas = normalizeArrayField(payload.targetingIdfas || payload.targeting_idfas)
 
   const creativeType = (payload.creative_type || payload.creativeType || 'box').toLowerCase()
 
   return {
     id: payload.id,
+    slotKey: payload.slot_key || payload.slotKey || payload.slot_key,
+    ownerId: payload.user_id || payload.ownerId || null,
     name: payload.name,
     headline: payload.headline,
     description: payload.description,
@@ -27,10 +46,19 @@ const normalizeAd = (payload) => {
     imageUrl: payload.image_url || payload.imageUrl,
     ctaUrl: payload.cta_url || payload.ctaUrl,
     ctaLabel: payload.cta_label || payload.ctaLabel || 'Learn more',
-    pixelId: payload.pixel_id || payload.pixelId,
-    targetingMode: (payload.targeting_mode || payload.targetingMode || 'all').toLowerCase(),
-    targetingValues,
-    active: payload.active !== false
+    targetingGeo,
+    targetingProvinces,
+    targetingCities,
+    targetingDevices,
+    targetingInterests,
+    targetingGaids,
+    targetingIdfas,
+    active: payload.active !== false,
+    cpcBid: Number(payload.cpc_bid || payload.cpcBid || 0),
+    dailyBudget: Number(payload.daily_budget || payload.dailyBudget || 0),
+    totalBudget: Number(payload.total_budget || payload.totalBudget || 0),
+    spentToday: Number(payload.spent_today || payload.spentToday || 0),
+    spentTotal: Number(payload.spent_total || payload.spentTotal || 0)
   }
 }
 
@@ -119,8 +147,16 @@ export const AdsApi = {
     return request(`/ads/${adId}/stats`)
   },
 
-  async snippet (adId, baseUrl) {
-    const payload = await request(`/ads/${adId}/snippet?baseUrl=${encodeURIComponent(baseUrl)}`)
+  async snippet (adId, baseUrl, partnerKey) {
+    const searchParams = new URLSearchParams()
+    if (baseUrl) {
+      searchParams.append('baseUrl', baseUrl)
+    }
+    if (partnerKey) {
+      searchParams.append('partnerKey', partnerKey)
+    }
+    const query = searchParams.toString()
+    const payload = await request(`/ads/${adId}/snippet${query ? `?${query}` : ''}`)
     return payload?.snippet || ''
   },
 
@@ -172,6 +208,50 @@ export const AuthApi = {
 export const ReportsApi = {
   overview () {
     return request('/reports/overview')
+  }
+}
+
+export const UsersApi = {
+  list (params = {}) {
+    const searchParams = new URLSearchParams()
+    if (params.role) {
+      searchParams.append('role', params.role)
+    }
+    const query = searchParams.toString()
+    return request(`/users${query ? `?${query}` : ''}`)
+  },
+
+  create (data) {
+    return request('/users', {
+      method: 'POST',
+      body: data
+    })
+  },
+
+  update (id, data) {
+    return request(`/users/${id}`, {
+      method: 'PUT',
+      body: data
+    })
+  }
+}
+
+export const BillingApi = {
+  deposit (amount, userId) {
+    return request('/billing/deposit', {
+      method: 'POST',
+      body: {
+        amount,
+        ...(userId ? { userId } : {})
+      }
+    })
+  },
+
+  requestPayout (amount) {
+    return request('/billing/payout', {
+      method: 'POST',
+      body: { amount }
+    })
   }
 }
 
