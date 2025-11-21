@@ -55,7 +55,7 @@ const AdDetailModal = ({
 
           <div className="flex flex-col lg:flex-row gap-6">
             {ad.imageUrl && (
-              <img src={ad.imageUrl} alt={ad.name} className="w-56 rounded-2xl object-cover shadow" />
+              <img src={ad.imageUrl} alt={ad.name} className="w-56" />
             )}
             <div className="flex-1 space-y-4">
               <p className="text-slate-600">{ad.description || 'No description provided.'}</p>
@@ -222,9 +222,21 @@ const AdDetailModal = ({
                             <span className="inline-flex w-fit px-2 py-0.5 text-xs font-semibold rounded-full bg-slate-100 text-slate-700">
                               {event.eventType?.toUpperCase()}
                             </span>
-                            {event.eventType && event.eventType.toLowerCase() === 'conversion' && event.metadata && (
-                              <pre className="bg-slate-900 text-white rounded-xl p-2 text-xs overflow-x-auto">{JSON.stringify(event.metadata, null, 2)}</pre>
-                            )}
+                            {
+                              event.eventType &&
+                              event.eventType.toLowerCase() === "conversion" &&
+                              event.metadata && (
+                                <pre className="bg-slate-900 text-white rounded-xl p-2 text-xs overflow-x-auto">
+                                  {JSON.stringify(
+                                    typeof event.metadata === "string"
+                                      ? JSON.parse(event.metadata)
+                                      : event.metadata,
+                                    null,
+                                    2
+                                  )}
+                                </pre>
+                              )
+                            }
                           </div>
                         </td>
                         <td className="py-3">{event.partner || '—'}</td>
